@@ -76,7 +76,8 @@ What the measurement found:
   plan Fable is also capped at half the weekly limit, so it is probably the first limit reached.
 - Returning to a thread after its cache expired (about an hour) re-writes the whole thread: 5 to 9% of the cost.
 
-Settings worth changing, in order (the owner decides):
+Settings worth changing, in order. Four of the five were applied on 2026-11-24 (see
+[docs/token-use.md](docs/token-use.md), "What was applied"); the fifth is a pick in the model picker:
 
 1. T3 Code, Settings, Providers, Claude: **Auto-compact after** `300000`.
 2. T3 Code, Settings, Providers, Advanced: **Compact idle threads** before the cache expires.

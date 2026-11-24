@@ -299,6 +299,34 @@ safe saving, and smaller than compacting earlier or moving long threads off Fabl
 To remove it: delete the `claudeLean` entry in T3 Code's Settings, Providers (or restore
 `~/.t3/userdata/settings.before-claude-lean.json`), and delete the overlay file.
 
+## What was applied (2026-11-24)
+
+The owner asked for all five settings. Four are in place and one is his to pick.
+
+| # | Setting | Status | Where it lives |
+|---|---|---|---|
+| 1 | Compact threads at 300,000 tokens | Applied | `autoCompactWindow: 300000` in `~/.claude/settings.json` |
+| 2 | Compact idle threads before the cache expires | Applied | `idleCompaction: "beforeCacheExpires"` in T3 Code's settings |
+| 3 | Stop loading claude.ai plugin sets and connectors | Applied and measured | `syncClaudeAiPlugins: false`, `syncClaudeAiSkills: false`, `disableClaudeAiConnectors: true` in `~/.claude/settings.json` |
+| 4 | Medium effort by default | Applied for Opus | The saved level for Opus 5.5 in `modelSettings` went from `high` to `medium`. In T3 Code a thread's own effort still wins. |
+| 5 | Start long threads on Opus | Not set | T3 Code's project default did not accept the value. Pick Opus in the model picker. |
+
+- **Setting 3, measured:** a new session started at 60,436 tokens before and 51,673 after, which is 8,763 fewer on
+  every request (measured here, a one-request Opus session outside T3 Code).
+- **What setting 3 removes from coding threads:** the claude.ai connectors (Gmail, Calendar, Drive, Docs, Sheets,
+  Slides, Netlify, Claude Docs), the plugin sets synced from the account (small-business with its Shopify tools, sales,
+  marketing, legal, design, engineering, cargo and others), and the synced skills for Word, PDF, PowerPoint and
+  spreadsheet files. They still work on claude.ai. Whether one set can be kept while the rest stay off was not tested.
+- **Settings 1 and 2 are set but their effect has not been observed yet.** Any thread already past 300,000 tokens
+  summarizes on its next message.
+- **The lean instance is now the default for ordinary Claude child agents,** by a rule in the owner's global rules
+  files. The gap in the trial above was measured before setting 3. With setting 3 on, a default session starts at
+  51,673 and a lean one at 42,374, so the lean instance now saves about 9,300 tokens per request, not 20,600.
+- **To undo:** restore `~/.claude/settings.before-usage-savings-2026-11-24.json` for settings 1, 3 and 4, and
+  `~/.t3/userdata/settings.before-idle-compaction.json` for setting 2.
+
+Re-measure after a week with the method at the end of this guide.
+
 ## Checked and not confirmed
 
 - Posts on X disagree about whether T3 Code compacts by default. On this Mac it does, but the automatic point is the
