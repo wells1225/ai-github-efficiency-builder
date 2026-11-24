@@ -84,7 +84,7 @@ Savings are estimates from the measured requests, not promises. They overlap, so
 | 1 | Compact threads earlier: set **Auto-compact after** to `300000` | T3 Code, Settings, Providers, Claude | 5 to 15%. At `200000`: 10 to 25%. Several users on X settle on `400000`, which saves less (not estimated here). | A compacted thread keeps a summary, not every detail. |
 | 2 | Compact idle threads **before the cache expires** (beta) | T3 Code, Settings, Providers, Advanced | Most of the 5 to 9% spent on returning to idle threads | A thread you never return to is still compacted once. |
 | 3 | Stop loading plugin sets and connectors you do not use for coding | `~/.claude/settings.json`: `syncClaudeAiPlugins: false`, `syncClaudeAiSkills: false`, `disableClaudeAiConnectors: true`, or `"<name>@<marketplace>": false` under `enabledPlugins` for a single plugin | About 5 to 9% if the start drops by 15,000 to 25,000 tokens | Those skills and connectors (Gmail, Drive and so on) are no longer available inside threads. They still work on claude.ai. |
-| 4 | Run threads at **medium** effort unless the task needs more | The model picker in T3 Code | Part of the 25% that is output | Less thinking per step. Medium is the documented default for Opus 5.5 and Fable 5.2. |
+| 4 | Run threads at **medium** effort unless the task needs more | The model picker in T3 Code | Part of the 25% that is output. Anthropic's own tests: Opus 5.5 at high costs $0.29 a task against $0.21 at medium, and Fable 5.2 at high costs 2.2 times medium. | Less thinking per step. On Anthropic's coding test, medium solved 92.8% and high 95.3%. Medium is the documented default for Opus 5.5 and Fable 5.2. |
 | 5 | Start long owner-facing threads on **Opus**, and keep Fable for advice and the sensitive code. Do not switch a thread that is already running. | The model picker in T3 Code | About a third of what those threads cost | Fable's judgment on every turn of the thread. |
 
 Check setting 3 with `/context` in a fresh thread before and after. `/usage` shows which plugin, skill or agent used the
@@ -132,7 +132,8 @@ were checked against the documentation on 2026-11-24 (documented:
   Changing effort does not, on the current models.
 - **The memory plugin's note-taker.** It runs on Haiku: about 1,900 requests in the week, around 1% of the cost at list
   prices (measured here).
-- **Changing the cache lifetime for child agents.** People who measured it got mixed results (reported). Measure first.
+- **Shortening the cache lifetime for child agents.** Measured here in the third round (see below): it would have cost
+  more, not less.
 
 ## Added after a second round of research
 
@@ -167,10 +168,103 @@ Looked for and not found: anyone else's before and after for the compaction sett
 what the superpowers or memory plugins cost in context, and any published formula for how the weekly limit weighs cache
 reads, cache writes and output.
 
+## Added after a third round of research
+
+Gemini 4 Neon read T3 Code's source and the official documentation to close the open questions. The source lines,
+Anthropic's effort table and the support pages were then opened again to check them, and two more things were measured
+on the owner's Mac.
+
+### How T3 Code starts a delegated child thread
+
+- **A child gets everything a normal thread gets.** T3 Code passes the same system prompt, tools, plugins, skills,
+  hooks and rules files to a delegated child as to a thread you type in. Only two things differ: prompt suggestions are
+  off, and the cache lifetime can be set separately (source, T3 Code `ClaudeAdapterV2.ts` at commit 3380585, as read by
+  the researcher). This is why each child starts at about 70,000 tokens.
+- **A child keeps the one-hour cache.** The source says: "A delegated child is its own SDK session, so Claude Code
+  gives it the main-conversation cache TTL." It follows `subagentPromptCacheTtl` only when that setting is present
+  (source, checked). The setting is absent on this Mac, and 75.6 million of the week's 76 million cache-write tokens
+  were written at the one-hour rate, which costs 2 times base input against 1.25 times for five minutes (measured
+  here).
+- **Do not switch children to the five-minute cache.** The researcher recommended it. Replaying the week says no: for
+  sessions with a single prompt, which stand in for delegated children, a five-minute cache would have cost about 12%
+  more on the prompt side ($709 against $636 at list prices), because 117 requests came after a pause of 5 to 60
+  minutes, usually a build or a wait on another agent, and each would have re-written its whole context. For threads
+  you type in, it would nearly double the cost (measured here; single-prompt sessions are a stand-in, not an exact
+  match for child threads).
+- **"Auto-compact after" applies to child threads too** (source, as read by the researcher). **"Compact idle threads"
+  does not:** it skips delegated children (source, checked). Where it does apply, it fires two minutes before the cache
+  expires, for threads of 200,000 tokens or more.
+- **Children can run on a leaner setup.** T3 Code supports a second Claude provider instance with its own configuration
+  folder, environment variables and launch arguments ("Use a separate Claude config directory for each account. This
+  also works for named presets", documented, T3 Code). `delegate_task` can target an instance by its id (source, as
+  read by the researcher). A lean instance with no synced plugin sets could start 25,000 to 30,000 tokens lighter. The
+  price: a separate configuration folder does not load the owner's global rules file or plugins unless they are copied
+  in, and it needs its own sign-in. Worth a trial, not a quick switch.
+
+### What each installed plugin adds to every turn
+
+From `claude plugin details <name>`, Claude Code's own estimate (measured here, 2026-11-24):
+
+| Plugin | Added to every session |
+|---|---|
+| t3-pstack | about 5,260 tokens |
+| claude-mem | about 2,890 |
+| superpowers | about 850, plus about 2,500 that its session-start hook prints |
+| obsidian | about 600 |
+| frontend-design | about 80 |
+| context7, swift-lsp | 0 |
+
+The seven installed plugins come to about 12,000 tokens with the hook output. `skillOverrides` cannot hide a plugin's
+skills. Only turning the plugin off does, under `enabledPlugins`, which can be set for one project (documentation, as
+read by the researcher).
+
+### Effort, with Anthropic's numbers
+
+| Model and test | Effort | Result | Cost per task |
+|---|---|---|---|
+| Opus 5.5, coding (SWE-bench Pro subset) | low | 87.4% solved | $0.11 |
+| | medium (default) | 92.8% | $0.21 |
+| | high | 95.3% | $0.29 |
+| | xhigh | 96.7% | $0.74 |
+| Fable 5.2, research (DeepResearch Bench II) | low | 54.5% | $1.49 |
+| | medium | 55.0% | $2.16 |
+| | high | 57.7% | $4.82 |
+
+Running Opus 5.5 at low and re-running only the failures at high solved about 97% for about $0.17 a task, better and
+cheaper than everything at high (documented and measured by Anthropic,
+[Optimizing for cost and intelligence](https://platform.claude.com/docs/en/about-claude/models/optimizing-for-cost-and-intelligence), checked).
+A child agent with no effort of its own runs at the level picked for the session (documented, as read by the
+researcher). The thread that produced this guide ran at high.
+
+### Limits on the Ultra plan
+
+- **Fable is capped at half the weekly limit.** "You can use up to 50% of your weekly usage limits on Fable models", and
+  Fable models "use them faster than other Claude models" (documented, Anthropic support, checked). Fable was a little
+  over half of this Mac's cost at list prices, so the Fable cap is probably the first limit reached. That makes setting
+  5 (start long threads on Opus) worth more than its list-price saving suggests.
+- **Fable resets are available.** Max and Ultra accounts that were paying before 2026-11-09 get one to three Fable
+  limit resets, depending on how long they have subscribed. A reset restores the weekly usage spent on Fable. They
+  expire on 2027-03-08. Claim one at Settings, Usage, Limit resets, "Reset for free", on the web, desktop or mobile
+  app. It cannot be claimed from Claude Code, but the restored usage applies there (documented, Anthropic support,
+  checked).
+- **The general reset reported on X (2026-11-10) has no official page** that the researcher could find.
+- **The weights are still unpublished.** No official page says how cache reads, cache writes and output count toward
+  the weekly limit.
+
+### Smaller points
+
+- T3 Code itself adds about 1,200 to 1,500 tokens of instructions and the names of its 92 tools, which load on demand
+  (source, as read by the researcher).
+- T3 Code has a usage view (`mod+u`) and can resume threads by itself after a limit resets (documented, T3 Code, as
+  read by the researcher).
+- Anthropic reports that `/doctor prompt-audit`, which removes instructions written for older models, cut cost by 9% on
+  Opus 5.5 (as read by the researcher, not re-checked).
+- Changing something at the front of the prompt mid-thread is expensive: on a 100,000-token conversation Anthropic
+  measured up to $1.26 for editing the system prompt against $0.026 for putting the same update in a message (as read
+  by the researcher, not re-checked).
+
 ## Checked and not confirmed
 
-- A researcher read in T3 Code's source that a delegated child thread gets the one-hour cache lifetime unless
-  `subagentPromptCacheTtl` is set. T3's documentation does not say this. Not acted on.
 - Posts on X disagree about whether T3 Code compacts by default. On this Mac it does, but the automatic point is the
   default of about 967,000 tokens. The earlier compactions were done by hand.
 - Fable usage is its own slice of the weekly limit, according to Anthropic staff on X (@lydiahallie and @bcherny,

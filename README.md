@@ -72,7 +72,8 @@ What the measurement found:
   Claude Code's default of about 967,000 tokens, because T3 Code's "Auto-compact after" setting is empty.
 - Every thread and every delegated child thread starts with about 70,000 tokens before anyone types. About 325 child
   agents were started in the week.
-- Fable costs twice what Opus does for output and cache writes, and made a little over half of the cost.
+- Fable costs twice what Opus does for output and cache writes, and made a little over half of the cost. On the Ultra
+  plan Fable is also capped at half the weekly limit, so it is probably the first limit reached.
 - Returning to a thread after its cache expired (about an hour) re-writes the whole thread: 5 to 9% of the cost.
 
 Settings worth changing, in order (the owner decides):
@@ -80,7 +81,8 @@ Settings worth changing, in order (the owner decides):
 1. T3 Code, Settings, Providers, Claude: **Auto-compact after** `300000`.
 2. T3 Code, Settings, Providers, Advanced: **Compact idle threads** before the cache expires.
 3. Stop loading the claude.ai plugin sets and connectors that are not used for coding.
-4. Medium effort unless the task needs more.
+4. Medium effort unless the task needs more. In Anthropic's tests Opus 5.5 at high costs $0.29 a task against $0.21 at
+   medium, for 2.5 points more solved.
 5. Start long owner-facing threads on Opus, and keep Fable for advice and the sensitive code.
 
 Habits for every thread:
