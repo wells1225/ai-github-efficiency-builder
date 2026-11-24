@@ -15,10 +15,14 @@ Each point carries one of five labels:
 ## What the evidence says, in one paragraph
 
 Agents do not need a tour of the repository. They read the code themselves, and a study of four agents found that an
-overview file did not help them find the right files any sooner, while auto-generated instruction files made them slightly
-less successful and 20 to 23% more expensive. Hand-written files helped a little, about 4% on average (measured, ETH
-Zurich and LogicStar.ai, arXiv 2602.11988). What the tool makers recommend is a short, hand-written file that says how to
-check the work, plus checks that fail when a rule is broken. So the standard
+overview file did not help them find the right files any sooner. In the study's first version, auto-generated instruction
+files made agents slightly less successful and 20 to 23% more expensive, and hand-written ones helped a little. The
+revised version (September 2026) is blunter: neither kind generally improves success, and both raise cost by over 20% on
+average (measured, ETH Zurich and LogicStar.ai, arXiv 2602.11988). Another study points the other way on speed: with an
+`AGENTS.md`, runs were about 29% faster and wrote about 17% fewer output tokens (measured, arXiv 2601.20404, 10
+repositories, 124 pull requests). So a rules file is not free, and every line has to earn its place. What the tool
+makers recommend is a short, hand-written file that says how to check the work, plus checks that fail when a rule is
+broken. So the standard
 below is mostly about commands and checks, and only a little about folders.
 
 ## Part 1: a new repository
@@ -230,8 +234,8 @@ A second round on X dug into the leads above and looked for new ones. The main a
 - **A stale line costs quietly, and the agent does not fix it.** With a stale test command the agent recovered but
   needed about two extra tool calls per run, and no agent repaired the rules file. Correcting the line removed the
   wasted work, and deleting it prevented most of it (measured, Mehtiyev and others,
-  [arXiv 2611.09802](https://arxiv.org/abs/2611.09802), 2026-11-06). So fix or delete a wrong line. Do not add a
-  warning beside it.
+  [arXiv 2611.09802](https://arxiv.org/abs/2611.09802), 2026-11-06). So correct a wrong line. Deleting it is second
+  best. Do not add a warning beside it.
 - **A short rules file, measured.** On one documentation site, a rules file of about 50 lines took fully correct runs
   from 7 of 9 to 9 of 9 and cut tokens by 36% and cost by 26% (measured, Agentic AI Foundation blog, 2026-11-11, a small
   test: three tasks, 18 runs, one agent). The author notes the agent then checked little else, so the file has to stay
@@ -253,6 +257,84 @@ A second round on X dug into the leads above and looked for new ones. The main a
 Still not found: the restructuring repo or its logs, anyone repeating that trial or the empty-file trial, a first-hand
 account of an agent reorganizing folders in a real repo, and any report of what agents break in Swift, Xcode, React
 Native or Electron projects.
+
+## Added after a third round of research
+
+Gemini 4 Neon read the studies in full, searched for others, compared the rules files of 16 large public repositories,
+and covered what the X rounds could not find. The papers, Apple's pages, Cursor's worktree page, Expo's template and
+Claude Code's review page were then opened again to check them.
+
+### Written rules are followed all the time or not at all
+
+- In 6,541 agent commits across 268 repositories, instructions in rules files split into two groups: about 54% were
+  followed in every commit they applied to, and about 37% in none (measured, [arXiv 2611.13709](https://arxiv.org/abs/2611.13709),
+  2026-11-10; these figures are from the paper's body as the researcher read it, and its abstract says only that agents
+  follow guidance "more often than not").
+- Of 184 dependency rules found in rules files ("this part must not import that part"), 33 were already broken by the
+  code on the day they were written, and stayed broken. Paths named in rules files were almost always right: about 2%
+  were real errors (measured, [arXiv 2611.29916](https://arxiv.org/abs/2611.29916), 2026-11-23, 3,346 repositories).
+- This is the strongest support yet for Part 1 section 3: a rule that must hold goes into a check. It also means a
+  short pointer to a path is safe to write, and a rule about structure is not, unless something enforces it.
+
+### How to word a rule, and how many files to keep
+
+- Say what to do and why. A rule phrased as a condition ("if X, do Y") was followed less often than one phrased as a
+  plain instruction or as an explanation (measured, [arXiv 2611.04367](https://arxiv.org/abs/2611.04367), 2026-11-03).
+- Keep one rules file, not two. Among repositories that keep several formats side by side, 16.1% of paired sections
+  give different guidance (measured, [arXiv 2611.02383](https://arxiv.org/abs/2611.02383), 3,387 files). The one-line
+  `CLAUDE.md` that imports `AGENTS.md` avoids this.
+
+### What 16 large public repositories put in their rules files
+
+Read on 2026-11-24 by the researcher (label: source). Supabase, Next.js, T3 Code, VS Code, React, Bun, uv, Cloudflare
+workers-sdk, Expo, Electron, Tuist, Sentry, Rust, React Native, Nx and Claude Code.
+
+- **Length varies from 7 lines to 532,** and every one is under Codex's 32 KiB limit.
+- **13 of 16 use `AGENTS.md` as the main file,** and 5 pair it with a one-line `CLAUDE.md`.
+- **13 of 16 tie rules to a named check** (a lint rule, a CI job, a script).
+- **Most give the command for one test and warn against running the whole suite.**
+- **Most name the generated folders that must never be edited by hand.**
+- **Two shapes work.** A short root file with many nested ones (Tuist: 82 lines at the root and 245 nested files; VS
+  Code: a 7-line pointer), or a long root runbook (Next.js: 532 lines; Electron: 346). Eight of the 16 include a folder
+  map despite the evidence against it. The better ones use a table from task to path, not a description of every folder.
+
+### Apple and Expo projects
+
+- **Xcode: use buildable folders.** The project file (`project.pbxproj`) lists every source file, so an agent that adds
+  or moves a file has to edit it, and merges conflict. Since Xcode 16, "buildable folders only record the folder path
+  into the project file without enumerating the contained files." Convert a group with "Convert to Folder" in the
+  Project Navigator. After that an agent adds, renames or deletes a Swift file on disk and the project file does not
+  change (documented, Apple, Xcode 16 release notes). Tuist and XcodeGen go further and generate the project file from
+  a short description (documented by each tool, not re-checked).
+- **Xcode: let the agent build and test through Xcode.** In Xcode, Settings, Intelligence, Model Context Protocol, set
+  "Allow External Agents to Use Xcode Tools". Then run `claude mcp add --transport stdio xcode -- xcrun mcpbridge`, or
+  `codex mcp add xcode -- xcrun mcpbridge` for Codex (documented, Apple, "Giving external agents access to Xcode").
+- **Expo: follow the rules Expo ships.** Its own template `AGENTS.md` (43 lines) says: install packages with
+  `npx expo install`, read the versioned docs and `llms.txt` instead of trusting memory, keep routes in `src/app/` and
+  everything else outside it, and never create or hand-edit `ios/` and `android/` when Expo generates them (source,
+  the template file).
+- **Electron:** no official guidance for agents was found.
+
+### Several agents in one repository
+
+- **Copy the files git ignores.** A new worktree has only tracked files, so it has no `.env`. A `.worktreeinclude` file
+  at the repo root lists ignored files to copy into each new worktree (documented, Claude Code; the researcher reports
+  Codex reads the same file).
+- **Install, do not link.** Cursor's `.cursor/worktrees.json` runs setup commands in each new worktree, and its
+  documentation says: "We do not recommend symlinking dependencies into the worktree." A package manager with a shared
+  store (pnpm, bun, uv) makes a full install cheap (documented, Cursor).
+- **A port and a database per worktree.** T3 Code's own repository does this with a setup script that runs when a
+  worktree is created (source, as read by the researcher, not re-checked).
+
+### Review rules live in their own file
+
+`REVIEW.md` at the repo root tailors Claude Code's review. It is read from the protected base branch, "never from the
+pull request's own changes", so a pull request cannot weaken its own review. Keep it to "instructions that change
+review behavior", such as how severe a finding must be, a cap on small remarks, and paths to skip (documented,
+[Claude Code](https://code.claude.com/docs/en/code-review-customize)).
+
+Still not measured by anyone, after three rounds: feature folders against layer folders, where tests live, a maximum
+file length, duplicate file names, and a README in every folder.
 
 ## Where good sources disagree
 

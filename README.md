@@ -37,6 +37,11 @@ found that overview files did not help them find code sooner, and that auto-gene
 9. **Say which wins.** Put this in your user-level rules file: "When a repository's documentation and its existing code
    disagree, follow the conventions used in the existing code, and report each mismatch." In the study it raised "follow
    the code" from 4% to 91%. Keep rules about safety and secrets binding either way.
+10. **Xcode projects: use buildable folders** (Xcode 16 and later), so adding a file does not touch the project file.
+    **Expo projects:** keep routes in `src/app/`, install with `npx expo install`, and never hand-edit generated
+    `ios/` and `android/` folders.
+11. **For several agents at once:** a `.worktreeinclude` file so each worktree gets its `.env`, and a port and a
+    database per worktree.
 
 ### A repository that already exists
 
@@ -91,7 +96,8 @@ Habits for every thread:
 
 - Grok searched X in two rounds: about 190 posts on layout and about 160 on token use, with the link, author and date
   of each post it cites. The second round re-examined the first round's leads and gave each a verdict.
-- Gemini 4 Neon read the tool makers' documentation, the published studies and T3 Code's own docs.
+- Gemini 4 Neon read the tool makers' documentation, the published studies and T3 Code's own docs, then in a later
+  round read the studies in full and compared the rules files of 16 large public repositories.
 - The main claims and every setting name were then checked against the original pages.
 - The usage numbers were counted from the Claude Code transcripts on the owner's Mac.
 
