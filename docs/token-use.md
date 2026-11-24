@@ -263,6 +263,42 @@ researcher). The thread that produced this guide ran at high.
   measured up to $1.26 for editing the system prompt against $0.026 for putting the same update in a message (as read
   by the researcher, not re-checked).
 
+## Trial: a lean setup for child agents (2026-11-24)
+
+**Result: a child on the lean setup started 20,600 tokens lighter, 50,600 against 71,200, and lost nothing it needs.**
+
+How it is set up, with no second sign-in and no second configuration folder:
+
+- An overlay file, `~/.claude/lean-child-settings.json`, sets `syncClaudeAiPlugins` and `syncClaudeAiSkills` to
+  `false`, `disableClaudeAiConnectors` to `true`, and turns five plugins off under `enabledPlugins` (t3-pstack,
+  claude-mem, superpowers, obsidian, frontend-design). The normal settings file is not changed.
+- A second Claude instance in T3 Code, "Claude · Lean (child agents)", with id `claudeLean`, has one launch argument:
+  `--settings ~/.claude/lean-child-settings.json`. A delegate uses it only when its target names that instance.
+
+The same six-question read-only task went to both instances, on Opus 5.5 at medium effort (measured here):
+
+| | Default instance | Lean instance |
+|---|---|---|
+| Tokens in the first request | 71,194 | 50,579 |
+| Skills listed | about 255, from 19 plugin sets | about 18, none from a plugin |
+| Session-start messages from plugins | 3 (t3-pstack, superpowers, claude-mem) | none |
+| claude.ai connectors (Gmail, Drive and others) | listed | not listed |
+| Global rules file loaded | yes | yes |
+| Test-worker cap (`VITEST_MAX_WORKERS`) | 2 | 2 |
+| T3 Code's own tools, such as `delegate_task` | available | available |
+| Cost of the whole two-request task at list prices | about $0.36 | about $0.22 |
+
+What a lean child gives up: the pstack and superpowers skills, memory capture by claude-mem, the Obsidian and
+frontend-design skills, and the claude.ai connectors and plugin sets. A child that needs one of those should run on the
+default instance. pstack runs stay on the default instance.
+
+What it is worth: about 20,600 fewer tokens on every request a child makes, and about 16,000 fewer written when it
+starts. If every Claude child used it, that is roughly 2 to 4% of the measured week at list prices. It is a small,
+safe saving, and smaller than compacting earlier or moving long threads off Fable.
+
+To remove it: delete the `claudeLean` entry in T3 Code's Settings, Providers (or restore
+`~/.t3/userdata/settings.before-claude-lean.json`), and delete the overlay file.
+
 ## Checked and not confirmed
 
 - Posts on X disagree about whether T3 Code compacts by default. On this Mac it does, but the automatic point is the
