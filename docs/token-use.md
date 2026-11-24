@@ -81,7 +81,7 @@ Savings are estimates from the measured requests, not promises. They overlap, so
 
 | # | Change | Where | Expected saving | What you give up |
 |---|---|---|---|---|
-| 1 | Compact threads earlier: set **Auto-compact after** to `300000` | T3 Code, Settings, Providers, Claude | 5 to 15%. At `200000`: 10 to 25%. | A compacted thread keeps a summary, not every detail. |
+| 1 | Compact threads earlier: set **Auto-compact after** to `300000` | T3 Code, Settings, Providers, Claude | 5 to 15%. At `200000`: 10 to 25%. Several users on X settle on `400000`, which saves less (not estimated here). | A compacted thread keeps a summary, not every detail. |
 | 2 | Compact idle threads **before the cache expires** (beta) | T3 Code, Settings, Providers, Advanced | Most of the 5 to 9% spent on returning to idle threads | A thread you never return to is still compacted once. |
 | 3 | Stop loading plugin sets and connectors you do not use for coding | `~/.claude/settings.json`: `syncClaudeAiPlugins: false`, `syncClaudeAiSkills: false`, `disableClaudeAiConnectors: true`, or `"<name>@<marketplace>": false` under `enabledPlugins` for a single plugin | About 5 to 9% if the start drops by 15,000 to 25,000 tokens | Those skills and connectors (Gmail, Drive and so on) are no longer available inside threads. They still work on claude.ai. |
 | 4 | Run threads at **medium** effort unless the task needs more | The model picker in T3 Code | Part of the 25% that is output | Less thinking per step. Medium is the documented default for Opus 5.5 and Fable 5.2. |
@@ -108,10 +108,14 @@ were checked against the documentation on 2026-11-24 (documented:
    Anthropic now lists "use subagents to protect your context window" under things to stop doing: "Running out of
    context is rarely the problem anymore" (documented, best practices). Use one for parallel work, noisy output or an
    independent review, and give it the file paths and the question so it does not re-read the repo.
-4. **Stop a review loop after 3 rounds** and ask the owner (default, taken from one practitioner's rule). Loops here ran
-   4 to 9 rounds per pull request, and each round starts new agents and wakes a large parent thread. Hand each round
-   the list of what was already fixed or rejected. Anthropic's own review tool reportedly ran over 50 rounds on one pull
-   request before a cap was added (reported on X by @davekiss and @ClaudeDevs, 2026-10-16).
+4. **Stop a review loop after 3 rounds** and ask the owner. Loops here ran 4 to 9 rounds per pull request, and each
+   round starts new agents and wakes a large parent thread. Anthropic had the same problem with its own review tool:
+   one pull request "went through more than fifty rounds of review and fixes overnight", and about 59% of what the
+   reviewer kept flagging was code that had been there since its first pass. Its fixes: after three rounds the reviewer
+   asks the author to reconsider the approach, later rounds review only the new diff, no finding is repeated, and the
+   reviewer flags the class of bug so every instance is fixed at once. Pull requests needing five or more rounds fell
+   from 8.9% to 1.5%, and the average number of reviews to pass fell from 2.08 to 1.32 (measured by Anthropic,
+   [Solving code review at Anthropic](https://claude.dev/blog/solving-code-review-at-anthropic/), 2026-10-15).
 5. **Do not wake a large idle thread for a small message.** The first request after the cache expires re-writes the
    whole thread (documented, [prompt caching](https://code.claude.com/docs/en/prompt-caching)). The cache lasts about an
    hour on a subscription.
@@ -130,13 +134,47 @@ were checked against the documentation on 2026-11-24 (documented:
   prices (measured here).
 - **Changing the cache lifetime for child agents.** People who measured it got mixed results (reported). Measure first.
 
+## Added after a second round of research
+
+A second round on X dug into the leads above and looked for new ones. What changed or was added:
+
+- **The review-loop cap is Anthropic's own practice, with numbers** (habit 4, now rewritten). A short `REVIEW.md` kept
+  with the code says what failure looks like in that repo, so the reviewer stops raising style points (documented, same
+  write-up).
+- **Agents that start together do not share a cache, unless they are forks or a workflow fan-out.** A subagent's first
+  request "doesn't read the parent's cache". A fork inherits the parent's context and does. In a workflow, Claude Code
+  holds every agent after the first for up to 5 seconds so the rest can read the first one's cache (documented, prompt
+  caching). Separate delegated threads get neither, so each pays for its own start.
+- **A child finishing does not break the parent's cache.** Its result is appended to the parent (documented, prompt
+  caching). The cost of a wake is the parent's size, not a rebuild, unless the parent sat idle past its cache lifetime.
+- **Subagents keep a 5-minute cache even on a subscription** (documented). One that waits longer than that on a build
+  or on another agent re-writes its whole context when it continues. One user found about 1% of pauses caused nearly
+  half of his subagent cache writes, and another cut usage "by at least 30%" by having the coordinator start background
+  threads in place of idle subagents (reported on X, 2026-10-10).
+- **Tools that find the waste for you:** `/usage` names the skill, plugin, subagent or server using the most and can
+  apply a fix with `f`. `/doctor` compares unused skills, servers and plugins with what they cost in context
+  (documented). The researcher also reports `/skill-doctor`, and that `skillOverrides` takes `on`, `name-only`,
+  `user-invocable-only` or `off` but does not control skills that come from plugins (documentation, read only in
+  summary).
+- **Another team's week looks like this one.** Of $2,495 at list prices, $532 was cache rebuilt after idle breaks and
+  $360 was history resent past 200,000 tokens, against $68 for failed tool calls (reported on X by @dannygnc,
+  2026-11-22).
+- **A free reset may be waiting.** Anthropic said on 2026-11-10 that bugs had used more of people's limits than
+  intended, and gave Pro, Max, Ultra and Team accounts one full reset of all limits, to be used before 2026-12-10 in
+  Settings, Usage (reported on X by @ClaudeDevs). Not checked on the owner's account.
+
+Looked for and not found: anyone else's before and after for the compaction settings, an independent measurement of
+what the superpowers or memory plugins cost in context, and any published formula for how the weekly limit weighs cache
+reads, cache writes and output.
+
 ## Checked and not confirmed
 
 - A researcher read in T3 Code's source that a delegated child thread gets the one-hour cache lifetime unless
   `subagentPromptCacheTtl` is set. T3's documentation does not say this. Not acted on.
 - Posts on X disagree about whether T3 Code compacts by default. On this Mac it does, but the automatic point is the
   default of about 967,000 tokens. The earlier compactions were done by hand.
-- Whether Fable has its own weekly limit on this plan: stated on a support page the researcher read, not re-checked.
+- Fable usage is its own slice of the weekly limit, according to Anthropic staff on X (@lydiahallie and @bcherny,
+  2026-11-09). The size of each slice is not published.
 
 ## How to re-measure
 

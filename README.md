@@ -32,6 +32,8 @@ found that overview files did not help them find code sooner, and that auto-gene
    re-export, except the entry file of a package that others install. Split a file that does two jobs.
 6. **A second `AGENTS.md` inside a folder** only when that folder has its own commands or gotchas.
 7. **Documents only for what code and history cannot show:** decisions and their reasons, and plans not built yet.
+8. **Keep the rules file true.** Agents follow a stale rules file over the code about 90% of the time, and they do not
+   fix it. Correct or delete a wrong line (arXiv 2610.30571 and 2611.09802).
 
 ### A repository that already exists
 
@@ -78,13 +80,14 @@ Habits for every thread:
 1. One task, one thread. Hand off with a short note and start fresh at about 200,000 tokens.
 2. Send independent tool calls together. Each extra turn re-reads the whole thread.
 3. Start a child agent only when it earns its 70,000-token start.
-4. Stop a review loop after 3 rounds and ask the owner. Loops here ran 4 to 9.
+4. Stop a review loop after 3 rounds and ask the owner. Loops here ran 4 to 9. Anthropic capped its own at 3 and saw
+   pull requests needing five or more rounds fall from 8.9% to 1.5%.
 5. Do not wake a large idle thread for a small message.
 
 ## How this was researched
 
-- Grok searched X: about 110 posts on layout and about 90 on token use, with the link, author and date of each post it
-  cites.
+- Grok searched X in two rounds: about 190 posts on layout and about 160 on token use, with the link, author and date
+  of each post it cites. The second round re-examined the first round's leads and gave each a verdict.
 - Gemini 4 Neon read the tool makers' documentation, the published studies and T3 Code's own docs.
 - The main claims and every setting name were then checked against the original pages.
 - The usage numbers were counted from the Claude Code transcripts on the owner's Mac.

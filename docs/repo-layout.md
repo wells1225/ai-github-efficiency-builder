@@ -212,6 +212,43 @@ numbers, a 3-hour change across 89 files made in one go was thrown away, and 11 
 - Step 5 is never done unasked. Propose it to the owner first, with the counts and the list of steps.
 - Never move files that an open pull request touches, and never untrack a file to satisfy an ignore rule.
 
+## Added after a second round of research
+
+A second round on X dug into the leads above and looked for new ones. The main additions were checked at the source.
+
+- **When the rules file and the code disagree, agents follow the file.** In 40 purpose-built Python projects, 90% of
+  the agents' choices followed a stale rules file over the code, and Claude Code pointed out the conflict in 79 of 80
+  runs and followed the file anyway. One instruction in the user-level rules file changed that: "When a repository's
+  documentation and its existing code disagree, follow the conventions used in the existing code", plus a request to
+  report each mismatch. The share of choices that followed the code rose from 4% to 91% (measured, Xu and Wu,
+  [arXiv 2610.30571](https://arxiv.org/abs/2610.30571), 2026-10-22, two agents, constructed conflicts).
+- **A stale line costs quietly, and the agent does not fix it.** With a stale test command the agent recovered but
+  needed about two extra tool calls per run, and no agent repaired the rules file. Correcting the line removed the
+  wasted work, and deleting it prevented most of it (measured, Mehtiyev and others,
+  [arXiv 2611.09802](https://arxiv.org/abs/2611.09802), 2026-11-06). So fix or delete a wrong line. Do not add a
+  warning beside it.
+- **A short rules file, measured.** On one documentation site, a rules file of about 50 lines took fully correct runs
+  from 7 of 9 to 9 of 9 and cut tokens by 36% and cost by 26% (measured, Agentic AI Foundation blog, 2026-11-11, a small
+  test: three tasks, 18 runs, one agent). The author notes the agent then checked little else, so the file has to stay
+  true.
+- **A public example of the shape.** Supabase's root `AGENTS.md` is about 77 lines: the layout in a few lines, the exact
+  commands, the generated files that must not be edited by hand, and a pointer to the skills folder (documented, the
+  file itself). Next.js keeps a 531-line file with a command for every test mode, which is the long-file side of the
+  disagreement below.
+- **Codex stops loading rules files at 32 KiB in total,** reading from the root down (documented, OpenAI). A long root
+  file can leave no room for the nested file nearest the work.
+- **Several agents at once fail on shared state before they fail on git.** People who ran agents in parallel worktrees
+  report a shared test database and a shared environment file as what broke. Their fixes: a database and a port per
+  worktree, one writer for shared files such as `package.json`, and one coordinator that merges (reported on X, four
+  accounts, November 2026).
+- **A reviewer that runs the code finds what a reviewer of the diff misses.** One practitioner reports that reviewers
+  reading only the diff found none of 8 logic bugs, and that writing test inputs before reading the implementation
+  raised it from 4 of 8 to 7 of 8 (reported on X by @tvykruta, 2026-10-02, two of his own pull requests).
+
+Still not found: the restructuring repo or its logs, anyone repeating that trial or the empty-file trial, a first-hand
+account of an agent reorganizing folders in a real repo, and any report of what agents break in Swift, Xcode, React
+Native or Electron projects.
+
 ## Where good sources disagree
 
 | Question | One side | The other side |
