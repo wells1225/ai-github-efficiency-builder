@@ -17,12 +17,12 @@ One week, Opus 5.5 and Fable 5.2 together (measured here):
 |---|---|
 | Requests | about 18,100 |
 | Tokens of context carried by those requests | 4.3 billion |
-| Average context per request | about 209,000 tokens |
+| Average context per request | about 239,000 tokens |
 | New text returned by tools in the whole week | about 31 million tokens |
 | Output written by the models | about 24 million tokens |
 
 Every request re-reads the whole thread so far. So the cost is the number of requests multiplied by the size of the
-thread, and what the tools return hardly matters: it is under 1% of what gets re-read. "A one-line question in a session
+thread. New tool output is under 1% of the tokens read in the week: what costs is that every later turn reads it again. "A one-line question in a session
 that has been open all day still draws usage for the whole conversation" (documented,
 [costs](https://code.claude.com/docs/en/costs)).
 
@@ -40,18 +40,21 @@ counts against plan limits at a reduced rate, not zero (documented).
 
 Four findings explain most of it:
 
-1. **Threads grow very large before they shrink.** Compaction happened at a median of 416,000 tokens, and one in ten
-   only near 964,000. 139 of 337 sessions passed 400,000 tokens. Two thirds of the usage came from requests carrying
-   more than 200,000 tokens. The reason: these models have a 1 million token window, and Claude Code by default compacts
-   "at about 967K tokens" (documented, [model config](https://code.claude.com/docs/en/model-config)). T3 Code's
-   "Auto-compact after" setting is empty on this Mac.
-2. **Every thread and every child agent starts with about 70,000 tokens** before anyone types. That is 29% of all the
-   context re-read in the week. About 325 Claude child agents were started in the week, and each paid for that start in
-   full, at the cache-write price.
+1. **Threads grow very large before they shrink.** 139 of 337 sessions passed 400,000 tokens, and two thirds of the
+   usage came from requests carrying more than 200,000. Threads were compacted 25 times in the week, at a median of
+   416,000 tokens: 17 by hand, and 8 automatically, the automatic ones near 964,000. The reason: these models have a 1 million token
+   window, and Claude Code by default compacts at about 967,000 tokens (documented,
+   [model config](https://code.claude.com/docs/en/model-config)). T3 Code's "Auto-compact after" setting is empty on
+   this Mac, so nothing compacts a thread earlier unless someone does it by hand.
+2. **Every thread and every delegated child thread starts with about 70,000 tokens** before anyone types. That is 29%
+   of all the context re-read in the week. About 325 Claude child agents were started in the week, most of them
+   delegated threads, and each paid for its start in full at the cache-write price. A subagent started with Claude
+   Code's own Agent tool gets a smaller prompt (documented), but still starts cold.
 3. **Fable costs twice what Opus does** for output and for cache writes, and the same for cache reads (documented, price
    list). Fable made a third of the requests and a little over half of the cost.
 4. **Coming back to a thread after its cache has expired** re-writes the whole thread. That was 5 to 9% of the cost,
-   depending on the weights used.
+   depending on the weights used. T3 Code's "Compact idle threads" is set to "When you return" on this Mac, which offers
+   a Compact button only after the cache has already gone.
 
 What is in the 70,000-token start, measured on one fresh thread (approximate):
 
@@ -78,22 +81,23 @@ Savings are estimates from the measured requests, not promises. They overlap, so
 |---|---|---|---|---|
 | 1 | Compact threads earlier: set **Auto-compact after** to `300000` | T3 Code, Settings, Providers, Claude | 5 to 15%. At `200000`: 10 to 25%. | A compacted thread keeps a summary, not every detail. |
 | 2 | Compact idle threads **before the cache expires** (beta) | T3 Code, Settings, Providers, Advanced | Most of the 5 to 9% spent on returning to idle threads | A thread you never return to is still compacted once. |
-| 3 | Stop loading plugin sets and connectors you do not use for coding | `~/.claude/settings.json`: `syncClaudeAiPlugins`, `syncClaudeAiSkills`, `disableClaudeAiConnectors`, or single entries under `enabledPlugins` | About 5 to 9% if the start drops by 15,000 to 25,000 tokens | Those skills and connectors (Gmail, Drive and so on) are no longer available inside threads. They still work on claude.ai. |
+| 3 | Stop loading plugin sets and connectors you do not use for coding | `~/.claude/settings.json`: `syncClaudeAiPlugins: false`, `syncClaudeAiSkills: false`, `disableClaudeAiConnectors: true`, or `"<name>@<marketplace>": false` under `enabledPlugins` for a single plugin | About 5 to 9% if the start drops by 15,000 to 25,000 tokens | Those skills and connectors (Gmail, Drive and so on) are no longer available inside threads. They still work on claude.ai. |
 | 4 | Run threads at **medium** effort unless the task needs more | The model picker in T3 Code | Part of the 25% that is output | Less thinking per step. Medium is the documented default for Opus 5.5 and Fable 5.2. |
-| 5 | Run long owner-facing threads on **Opus**, and keep Fable for advice and the sensitive code | The model picker in T3 Code | About a third of what those threads cost | Fable's judgment on every turn of the thread. |
+| 5 | Start long owner-facing threads on **Opus**, and keep Fable for advice and the sensitive code. Do not switch a thread that is already running. | The model picker in T3 Code | About a third of what those threads cost | Fable's judgment on every turn of the thread. |
 
 Check setting 3 with `/context` in a fresh thread before and after. `/usage` shows which plugin, skill or agent used the
 most (documented).
 
-The first figure in settings 1 and 2 uses today's list prices, and the second uses the older, simpler weights. All the
-names in this table were checked against the documentation on 2026-11-24 (documented:
+In each range for settings 1 and 2, the lower number uses today's list prices and the higher number uses the simpler
+weights the measurement started with (input 1, cache write 1.25, cache read 0.1, output 5). All the names in this table
+were checked against the documentation on 2026-11-24 (documented:
 [T3 Code Claude provider](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-claude.md),
 [settings reference](https://code.claude.com/docs/en/settings-reference)).
 
 ### Habits (what every thread does)
 
-1. **One task, one thread.** When a task is done, or a thread passes about 200,000 tokens, write a short handoff note
-   (done, in progress, left to do) and continue in a new thread. Anthropic's first cost recommendation is to clear
+1. **One task, one thread.** When a task is done, or a thread passes about 200,000 tokens (default), write a short
+   handoff note (done, in progress, left to do) and continue in a new thread. Anthropic's first cost recommendation is to clear
    between unrelated tasks (documented, costs). Threads of 500 to 900 requests are where the cost is.
 2. **Fewer requests.** Send independent tool calls together in one turn, and chain shell checks in one command. Each
    extra turn re-reads the whole thread. The researcher reports that Anthropic's parallel tool use page says Fable
@@ -102,20 +106,22 @@ names in this table were checked against the documentation on 2026-11-24 (docume
    Anthropic now lists "use subagents to protect your context window" under things to stop doing: "Running out of
    context is rarely the problem anymore" (documented, best practices). Use one for parallel work, noisy output or an
    independent review, and give it the file paths and the question so it does not re-read the repo.
-4. **Stop a review loop after 3 rounds** and ask the owner. Loops here ran 4 to 9 rounds per pull request, and each
-   round starts new agents and wakes a large parent thread. Hand each round the list of what was already fixed or
-   rejected. Anthropic's own review tool reportedly ran 50 rounds on one pull request before a cap was added (reported
-   on X, 2026-10-16).
+4. **Stop a review loop after 3 rounds** and ask the owner (default, taken from one practitioner's rule). Loops here ran
+   4 to 9 rounds per pull request, and each round starts new agents and wakes a large parent thread. Hand each round
+   the list of what was already fixed or rejected. Anthropic's own review tool reportedly ran over 50 rounds on one pull
+   request before a cap was added (reported on X by @davekiss and @ClaudeDevs, 2026-10-16).
 5. **Do not wake a large idle thread for a small message.** The first request after the cache expires re-writes the
    whole thread (documented, [prompt caching](https://code.claude.com/docs/en/prompt-caching)). The cache lasts about an
    hour on a subscription.
-6. **Orchestrate from a small thread.** Each child that finishes wakes its parent, and the parent re-reads everything
-   it holds. A parent at 400,000 tokens pays that on every wake.
-7. **Read part of a file when part is enough,** and keep long output in a file, not in the thread.
+6. **Orchestrate from a small thread** (default). Each child that finishes wakes its parent, and the parent re-reads
+   everything it holds. A parent at 400,000 tokens pays that on every wake.
+7. **Read part of a file when part is enough,** and keep long output such as logs and test runs in a file, not in the
+   thread. Anthropic's cost page recommends filtering noisy output (documented, costs).
 
 ### What is not worth the effort
 
-- **Trimming tool output.** It is under 1% of what gets re-read (measured here).
+- **Fine-tuning small tool outputs.** New tool output is under 1% of what gets read (measured here). Keep the large
+  ones out (habit 7) and leave the rest alone.
 - **Switching models inside a thread to save money.** A model switch rebuilds the cache (documented, prompt caching).
   Changing effort does not, on the current models.
 - **The memory plugin's note-taker.** It runs on Haiku: about 1,900 requests in the week, around 1% of the cost at list
@@ -126,7 +132,8 @@ names in this table were checked against the documentation on 2026-11-24 (docume
 
 - A researcher read in T3 Code's source that a delegated child thread gets the one-hour cache lifetime unless
   `subagentPromptCacheTtl` is set. T3's documentation does not say this. Not acted on.
-- Posts on X disagree about whether T3 Code compacts by default. On this Mac it does, but only near the 1 million limit.
+- Posts on X disagree about whether T3 Code compacts by default. On this Mac it does, but the automatic point is the
+  default of about 967,000 tokens. The earlier compactions were done by hand.
 - Whether Fable has its own weekly limit on this plan: stated on a support page the researcher read, not re-checked.
 
 ## How to re-measure
@@ -134,4 +141,4 @@ names in this table were checked against the documentation on 2026-11-24 (docume
 The transcripts are in `~/.claude/projects/`, one JSON line per message. Each assistant line has `message.usage` with
 `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens` and `output_tokens`. Count each request once
 (the same `message.id` and `requestId` repeat while a reply streams). Re-run after changing a setting and compare the
-average context per request and the share of requests over 200,000 tokens.
+average context per request and the share of usage that comes from requests over 200,000 tokens.

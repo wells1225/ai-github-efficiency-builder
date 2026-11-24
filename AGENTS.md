@@ -12,8 +12,9 @@ There is no code, no build and no test suite yet, so there is no full check to r
 
 ## Rules to follow
 
-- Every point in a guide carries a source and one of the labels the guide defines (documented, measured, reported,
-  default, opinion). A claim found only on X is "reported" or "opinion", never "measured".
+- Every point in a guide carries a source and one of these labels: documented, measured, measured here (counted from
+  the owner's own transcripts), reported, opinion, default. A claim found only on X is "reported" or "opinion", never
+  "measured".
 - Open the page before citing it. Tools change quickly: when a page and memory disagree, the page wins.
 - Files in `research/` are records. Do not edit them. New research goes in a new file with its date in the heading.
 - The usage numbers in `docs/token-use.md` come from the owner's own transcripts on one Mac. Say the date range when
