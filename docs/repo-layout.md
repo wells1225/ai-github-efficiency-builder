@@ -148,6 +148,7 @@ Use the one for the repo's language.
 ## Rules to follow
 - <a decision the code does not show, and why>
 - <a gotcha that has cost time>
+- When this file and the code disagree on how code is written, follow the code and report the mismatch.
 
 ## Where things go
 - <only what is not obvious from the tree, such as where tests live>
@@ -211,6 +212,9 @@ numbers, a 3-hour change across 89 files made in one go was thrown away, and 11 
   and 6) is proposed to the owner with the diff first.
 - Step 5 is never done unasked. Propose it to the owner first, with the counts and the list of steps.
 - Never move files that an open pull request touches, and never untrack a file to satisfy an ignore rule.
+- When a repo's documents and its existing code disagree on how code is written, follow the code and report the
+  mismatch in the final reply. This has been in the owner's user-level rules files since 2026-11-24. It never
+  overrides a rule about safety, secrets or what only the owner starts.
 
 ## Added after a second round of research
 
@@ -218,7 +222,8 @@ A second round on X dug into the leads above and looked for new ones. The main a
 
 - **When the rules file and the code disagree, agents follow the file.** In 40 purpose-built Python projects, 90% of
   the agents' choices followed a stale rules file over the code, and Claude Code pointed out the conflict in 79 of 80
-  runs and followed the file anyway. One instruction in the user-level rules file changed that: "When a repository's
+  runs and followed the file anyway. One instruction in the user-level rules file (for Claude Code,
+  `~/.claude/CLAUDE.md`) changed that: "When a repository's
   documentation and its existing code disagree, follow the conventions used in the existing code", plus a request to
   report each mismatch. The share of choices that followed the code rose from 4% to 91% (measured, Xu and Wu,
   [arXiv 2610.30571](https://arxiv.org/abs/2610.30571), 2026-10-22, two agents, constructed conflicts).

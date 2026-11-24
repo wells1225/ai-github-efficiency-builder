@@ -34,6 +34,9 @@ found that overview files did not help them find code sooner, and that auto-gene
 7. **Documents only for what code and history cannot show:** decisions and their reasons, and plans not built yet.
 8. **Keep the rules file true.** Agents follow a stale rules file over the code about 90% of the time, and they do not
    fix it. Correct or delete a wrong line (arXiv 2610.30571 and 2611.09802).
+9. **Say which wins.** Put this in your user-level rules file: "When a repository's documentation and its existing code
+   disagree, follow the conventions used in the existing code, and report each mismatch." In the study it raised "follow
+   the code" from 4% to 91%. Keep rules about safety and secrets binding either way.
 
 ### A repository that already exists
 

@@ -21,6 +21,7 @@ There is no code, no build and no test suite yet, so there is no full check to r
   quoting them, and re-measure before changing a recommendation that rests on them.
 - Keep `README.md` short enough to read in a few minutes. Detail goes in `docs/`.
 - Write in plain English, for a reader who has not seen the research.
+- When a guide and its source disagree, the source wins: correct the guide and say so in the pull request.
 - No detail about the owner or his other projects goes into a web search or a research brief.
 
 ## Pull requests
