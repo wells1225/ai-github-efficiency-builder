@@ -5,6 +5,7 @@ Researched on 2026-11-24. Three kinds of evidence, in order of weight:
 - **measured here**: counted from the Claude Code transcripts on the owner's Mac, 2026-11-17 to 2026-11-24.
 - **documented**: Anthropic's or T3 Code's own documentation, opened on 2026-11-24.
 - **reported**: what people posted on X (Grok read about 90 posts). Opinion until something else backs it.
+- **default**: nobody has measured it. It is our choice.
 
 The raw research is in [`research/`](../research/). The numbers cover Claude models only. Codex, Gemini and Grok run on
 their own plans and are not counted.
@@ -41,19 +42,20 @@ counts against plan limits at a reduced rate, not zero (documented).
 Four findings explain most of it:
 
 1. **Threads grow very large before they shrink.** 139 of 337 sessions passed 400,000 tokens, and two thirds of the
-   usage came from requests carrying more than 200,000. Threads were compacted 25 times in the week, at a median of
-   416,000 tokens: 17 by hand, and 8 automatically, the automatic ones near 964,000. The reason: these models have a 1 million token
+   usage came from requests carrying more than 200,000. Threads were compacted 25 times in the week: 17 by hand, at a
+   median of 416,000 tokens, and 8 automatically, at a median of 959,000 (three of the eight at 200,000 to 240,000). The reason: these models have a 1 million token
    window, and Claude Code by default compacts at about 967,000 tokens (documented,
    [model config](https://code.claude.com/docs/en/model-config)). T3 Code's "Auto-compact after" setting is empty on
    this Mac, so nothing compacts a thread earlier unless someone does it by hand.
 2. **Every thread and every delegated child thread starts with about 70,000 tokens** before anyone types. That is 29%
    of all the context re-read in the week. About 325 Claude child agents were started in the week, most of them
-   delegated threads, and each paid for its start in full at the cache-write price. A subagent started with Claude
+   delegated threads, and each paid for most of its start at the cache-write price (on the one fresh thread examined,
+   42,000 of 68,000 tokens were written and the rest were read from cache). A subagent started with Claude
    Code's own Agent tool gets a smaller prompt (documented), but still starts cold.
 3. **Fable costs twice what Opus does** for output and for cache writes, and the same for cache reads (documented, price
    list). Fable made a third of the requests and a little over half of the cost.
-4. **Coming back to a thread after its cache has expired** re-writes the whole thread. That was 5 to 9% of the cost,
-   depending on the weights used. T3 Code's "Compact idle threads" is set to "When you return" on this Mac, which offers
+4. **Coming back to a thread after its cache has expired** re-writes the whole thread. That was 5.3% of the cost with the simpler weights, and an estimated 9% at list prices,
+   where a cache write costs more. T3 Code's "Compact idle threads" is set to "When you return" on this Mac, which offers
    a Compact button only after the cache has already gone.
 
 What is in the 70,000-token start, measured on one fresh thread (approximate):
