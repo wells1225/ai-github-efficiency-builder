@@ -325,7 +325,81 @@ The owner asked for all five settings. Four are in place and one is his to pick.
 - **To undo:** restore `~/.claude/settings.before-usage-savings-2026-11-24.json` for settings 1, 3 and 4, and
   `~/.t3/userdata/settings.before-idle-compaction.json` for setting 2.
 
-Re-measure after a week with the method at the end of this guide.
+## Follow-up and other providers (2026-11-27)
+
+Three days after the 2026-11-24 Claude settings were applied, Claude was re-measured and Antigravity (Gemini 4 Neon),
+Codex and Grok were measured for the first time (all local figures: **measured here**, one Mac; raw notes in
+[`research/multi-provider-token-use-2026-11-27.md`](../research/multi-provider-token-use-2026-11-27.md) and
+[`research/multi-provider-x-grok-2026-11-27.md`](../research/multi-provider-x-grok-2026-11-27.md)).
+
+### Claude after three days (2026-11-24 to 2026-11-27)
+
+Non-Haiku requests, same deduplication method as above (measured here, one Mac):
+
+| Window | Requests | Avg context | Share from >200k | Requests >300k | Compactions |
+|---|---:|---:|---:|---:|---:|
+| Before (2026-11-17 to 2026-11-24) | 20,896 | 227,166 | 69.9% | 4,825 (23.1%) | 25 |
+| After (2026-11-24 to 2026-11-27) | 4,550 | 159,053 (-30%) | 42.6% | 187 (4.1%) | 22 |
+
+### Are lean child instances useful outside Anthropic?
+
+**Mostly no.** A separate lean child instance (`claudeLean`) is uniquely practical on Claude Code because T3 Code lets a
+second Claude instance pass `--settings` without a second login, and Claude carries a 2x 1-hour cache-write fee plus
+several heavy plugins. On the other three harnesses, trimming the single configuration directly works better:
+
+| Provider (2026-11-20 to 2026-11-27, one Mac) | Requests | Avg context | Fresh startup (median) | Cache hit | Best move |
+|---|---:|---:|---:|---:|---|
+| Antigravity (Gemini 4 Neon & others) | 4,439 | 206,996 | 43,249 (16,361 native subagent) | 93.2% | Do not make a second instance; update T3 Code for lazy MCP tools, default to `medium`/`high` instead of `xhigh`, and compact manually around 200k–250k. |
+| Codex (`gpt-6.2-astra` / `sol`) | 347 | 67,782 | 28,564 → **24,727** after change | 92.6% | Disable unused plugins directly in `~/.codex/config.toml` instead of cloning an instance. |
+| Grok (`grok-4.7`) | 25 turns | — | — | 88.5% | Keep `~/.grok/AGENTS.md` as a short Grok-only footer and disable unused inherited MCP servers in `~/.grok/config.toml`. |
+
+### What actually drives Antigravity / Gemini 4 Neon usage
+
+- **Pricing and caching mechanics (`documented`, [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing)):**
+  Gemini 4 Neon lists at $3.00 / 1M input tokens, $15.00 / 1M output tokens (including thinking tokens), and $0.15 / 1M
+  cached input tokens (95% discount, implicit caching only; explicit caching is not supported). Thinking tokens cost 100x
+  cached input.
+- **Effort dominates output spend (measured here, 2026-11-20 to 2026-11-27):** 46% of all Antigravity requests (2,048)
+  ran on `gemini-4-neon-xhigh` (averaging 272,135 tokens of context) and 27% (1,207) on `high`. Only 1.5% (67) ran on
+  `medium`, which is Google's documented default ([Antigravity models](https://antigravity.google/docs/models)).
+- **No automatic early compaction (measured here / documented):** 70.9% of Antigravity context came from requests over
+  200,000 tokens, 1,046 requests passed 300,000, and sessions reached 511,925 (Neon's documented 512K Antigravity
+  window) with 0 compactions. T3 Code's `autoCompactWindow` and `idleCompaction` are Claude-only
+  ([providers-claude.md](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-claude.md)). Use `/compact`
+  manually or hand off around 200,000–250,000 tokens ([Compact command](https://antigravity.google/docs/commands/compact)).
+- **Eager T3 MCP tools inflated startup, now fixed upstream (`source`):** T3 Code previously listed ~74–82 MCP tools
+  upfront (~50 KB) on Antigravity ACP, which pushed fresh T3 sessions from ~23.8k to ~43.2k tokens (measured here).
+  [T3 Code PR #39362](https://github.com/pingdotgg/t3code/pull/39362) (merged 2026-11-27) adds a `deferred-proxy` mode
+  exposing 5 direct tools (`orchestrator_capabilities`, `delegate_task`, `task_status`, `tool_search`, `tool_call`).
+  Updating T3 Code applies that cut to every Antigravity thread without a second instance.
+- **The cache cliff on this Mac is past 15 minutes idle, not 1 minute (measured here):** viral X reports from earlier
+  CLI builds (`1.5.11`–`1.5.12`) claimed Neon's cache fell to ~9% after 1 minute and missed 65% at 300–500k (reported on
+  X). Across 3,328 Neon calls here on Antigravity ACP `1.5.15`, cache hit stayed **90–94%** up through 15 minutes
+  (91.6% at 5–15 minutes) and **96.8%** at 300–512k, falling sharply only **past 15 minutes idle** (40.2% hit, 58.8%
+  zero-cache misses). Avoid waking a large Neon thread after more than 15 minutes idle.
+- **Global rules file size cap (`documented`):** Antigravity truncates any rule file over 24,000 bytes on line
+  boundaries ([Antigravity rules](https://antigravity.google/docs/rules)). Keep a symlinked global rules file safely
+  under 24 KB (20,688 bytes here after 2026-11-27).
+
+### What was applied on 2026-11-27 (and what was deferred)
+
+Applied after an independent review and verified with live sessions on Codex, Grok and Antigravity (measured here, one
+Mac):
+
+- **Codex:** turned `t3-pstack` off in `~/.codex/config.toml` (read-only review sessions do not run pstack, and absolute
+  `worker.md` paths outside Codex remain readable). `<skills_instructions>` fell from 27.1 KB to 11.5 KB (-15.6 KB), and
+  first-turn input dropped from 28,441 to 24,727 tokens even after syncing 4.5 KB of missing global rules (~4,850 net
+  tokens saved).
+- **Grok rules:** `grok inspect` showed Grok already loads `~/.claude/CLAUDE.md` (~5,172 tokens) via Claude
+  compatibility alongside `~/.grok/AGENTS.md` (~3,008 tokens). Replacing `~/.grok/AGENTS.md` with a Grok-only footer cut
+  it to ~282 tokens (~2,726 saved per turn) while keeping full global rules active.
+- **Grok MCPs:** disabled three unused local/plugin MCP servers (0 all-time calls) via `grok mcp disable <name>`
+  (`disabled_mcp_servers` in `~/.grok/config.toml`), leaving Claude's own MCP config untouched.
+- **Global rules and memory hygiene:** clarified that `claudeLean` covers Fable children as well as Opus; synced three
+  missing sections into `~/.codex/AGENTS.md`; deleted four superseded Claude memory files that contradicted current
+  rules (backups kept locally).
+- **Deferred to the owner:** whether to disable `claude-mem` globally (still actively called ~980 times in transcripts;
+  ~2.7 GB on disk) and whether to lower the `t3-pstack` model-sheet budget via `/setup-pstack`.
 
 ## Checked and not confirmed
 
