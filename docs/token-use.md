@@ -99,8 +99,9 @@ were checked against the documentation on 2026-11-24 (documented:
 ### Habits (what every thread does)
 
 1. **One PR (or task), one thread.** When a thread has already opened or finished a PR or task, start the next PR in a
-   new thread with a short handoff note (goal, files, branch, decisions) rather than reusing the old context. Stay in
-   the same thread for opening the PR for work built there, CI fixes and review rounds on that PR, work needing that
+   new thread with a short handoff note (goal, files, branch, decisions, only the earlier findings the next PR depends
+   on, each with why it matters and how to check it, and no transcript dump) rather than reusing the old context. Stay
+   in the same thread for opening the PR for work built there, CI fixes and review rounds on that PR, work needing that
    checkout's uncommitted edits, or a tiny warm follow-up under ~100k tokens. Anthropic's first cost recommendation is
    to clear between unrelated tasks (documented, costs). Threads of 500 to 900 requests are where the cost is.
 2. **Fewer requests.** Send independent tool calls together in one turn, and chain shell checks in one command. Each
@@ -123,8 +124,9 @@ were checked against the documentation on 2026-11-24 (documented:
    hour on a subscription.
 6. **Orchestrate from a small thread** (default). Each child that finishes wakes its parent, and the parent re-reads
    everything it holds. A parent at 400,000 tokens pays that on every wake.
-7. **Read part of a file when part is enough,** and keep long output such as logs and test runs in a file, not in the
-   thread. Anthropic's cost page recommends filtering noisy output (documented, costs).
+7. **Keep tool output small and targeted.** Filter large JSON, API and `gh` responses (`--jq`, `jq`) and long logs to
+   the needed fields or lines before they enter the thread, and search large files for the specific question (`rg`)
+   instead of reading whole files (documented, costs; see "Context-management techniques (2026-11-28)" below).
 
 ### What is not worth the effort
 
@@ -435,6 +437,59 @@ notes in [`research/new-thread-per-pr-opus-2026-11-27.md`](../research/new-threa
   `~/.claude/CLAUDE.md` under 22 KB. Warm active top-level threads were notified directly; cold idle threads were left
   sleeping so they do not pay a 2x cache rebuild and will pick up the rule on their next compaction or restart.
 
+### Context-management techniques: literature and X check (2026-11-28)
+
+Codex (`gpt-6.2-astra`) ran local checks and a literature pass alongside a Grok X search on `git bisect run`,
+path-scoped rules and structured-output filtering (raw notes in
+[`research/context-techniques-astra-2026-11-28.md`](../research/context-techniques-astra-2026-11-28.md) and
+[`research/context-techniques-x-grok-2026-11-28.md`](../research/context-techniques-x-grok-2026-11-28.md)). Every
+paper and writeup below was opened on 2026-11-28:
+
+- **Selective, dependency-named handoffs (`measured`, [SWE-ContextBench](https://arxiv.org/html/2602.08316v1), Sections
+  3.3 & 3.5, 99 related coding tasks):**
+
+| Experience reuse setting | Solved | Avg cost / task |
+|---|---:|---:|
+| No prior context (baseline) | 26.26% (26/99) | $0.79 |
+| Supplied relevant summary (Oracle Summary Reuse) | 34.34% (34/99) | $0.77 |
+| Supplied full prior trajectory (Oracle Experience Reuse) | 27.27% (27/99) | modest increase over baseline |
+| Agent chooses summaries itself (Free Summary Reuse) | 22.22% (22/99) | $0.85 |
+| Agent chooses raw trajectories itself (Free Experience Reuse) | 26.26% (26/99) | $0.98 |
+
+  Supplying a relevant summary raised solves from 26 to 34 of 99 at the lowest average cost ($0.77), while letting the
+  agent select summaries itself dropped solves below baseline to 22 of 99 at $0.85. Naming the concrete dependency (*why*
+  a carried-over finding matters to the next PR and *how* to check it) is our practical approximation of supplied
+  relevance; the self-selection drop is also a caution for automatic memory-retrieval tools.
+- **Filtering structured JSON, API and `gh` payloads before they enter context:**
+  - `measured here` (2026-11-27, PR #2 of this repo): raw `gh api` PR JSON was **22,194 bytes** vs. **91 bytes** for
+    the 5 status fields needed (**244x smaller** bytes entering the thread; billed token delta not separately metered).
+  - `reported` (`@kellegous`, 2026-11-27,
+    [writeup](https://kellegous.com/j/2026/11/27/filtering-mcp-tools-with-jq-pt2/) with published code): adding optional
+    `jq` filtering (parameter or meta-tool) to MCP JSON cut total input tokens by **85.5% / 81.9%** on Claude Opus 5.5
+    and **91.7% / 93.3%** on GPT-6.2 Sol at unchanged accuracy on his evaluation set.
+- **Question-guided reads and git history:**
+  - `measured` ([SWE-Pruner](https://arxiv.org/html/2601.16746v1), Table 3, 50-task SWE-bench subset): a trained 0.6B
+    neural skimmer guided by an explicit read question solved **64% vs. 62%** (32/50 vs. 31/50) using **31% fewer
+    tokens** (generic summarization dropped to 56%). Our habit of searching a large file with a specific question
+    (`rg`/symbol lookup) before reading a range is an **inference** from this method, not a forecast of 31% savings.
+  - `default` (no published before/after token measurements found on X for `git bisect run` or `.claude/rules/`
+    `paths:`): use `git log -S` when you know the literal that changed, and `git bisect run` when only running a test
+    identifies the regressing commit.
+- **Observation masking vs. LLM summarization (`measured`,
+  [JetBrains Research — The Complexity Trap](https://kairos.jetbrains.com/research/articles/the-complexity-trap),
+  August 2025, older models):** replacing older tool outputs with placeholders roughly halved cost against raw history,
+  achieved the lowest cost in **4 of 5** model setups with solve rate on par (ahead in 2 of 5), and avoided
+  summarization stretching trajectories (Gemini 2.5 Flash averaged **52 turns** after summarization vs. **44** with
+  masking). Claude Code already runs server-side tool-result clearing (`microcompact`, not user-tunable), whereas naive
+  client-side masking would break prompt caching. Consistent with (**inference**) keeping `autoCompactWindow` moderate
+  (`300000`) rather than compacting aggressively early.
+- **Reading order for this repository (`measured here`, 2026-11-27):** `README.md` (9,287 B) and `docs/` (59,217 B)
+  hold 14% of tracked bytes while the 12 earlier `research/` files hold 86% (430,671 B). Search `README.md` and `docs/`
+  first (`rg`), and open a `research/` file only when verifying a cited detail.
+- **Applied on 2026-11-28 (reviewed by Fable):** upgraded the handoff clause in `## A new PR gets a new thread` and
+  appended `## Keep tool output small` to `~/.claude/CLAUDE.md` (21,941 B, under 22 KB) and `~/.codex/AGENTS.md`
+  (18,724 B). Existing threads were not woken; they inherit the updated rules on their next start or compaction.
+
 ## Checked and not confirmed
 
 - Posts on X disagree about whether T3 Code compacts by default. On this Mac it does, but the automatic point is the
@@ -446,5 +501,7 @@ notes in [`research/new-thread-per-pr-opus-2026-11-27.md`](../research/new-threa
 
 The transcripts are in `~/.claude/projects/`, one JSON line per message. Each assistant line has `message.usage` with
 `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens` and `output_tokens`. Count each request once
-(the same `message.id` and `requestId` repeat while a reply streams). Re-run after changing a setting and compare the
-average context per request and the share of usage that comes from requests over 200,000 tokens.
+(the same `message.id` and `requestId` repeat while a reply streams). Re-run after changing a setting and compare
+**cost per successfully completed task** alongside request count, cache reads, average context per request, and the
+share of usage from requests over 200,000 tokens — because a shorter prompt that adds turns or lowers fix quality can
+cost more overall.
