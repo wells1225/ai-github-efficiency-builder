@@ -98,9 +98,12 @@ were checked against the documentation on 2026-11-24 (documented:
 
 ### Habits (what every thread does)
 
-1. **One task, one thread.** When a task is done, or a thread passes about 200,000 tokens (default), write a short
-   handoff note (done, in progress, left to do) and continue in a new thread. Anthropic's first cost recommendation is to clear
-   between unrelated tasks (documented, costs). Threads of 500 to 900 requests are where the cost is.
+1. **One PR (or task), one thread.** When a thread has already opened or finished a PR or task, start the next PR in a
+   new thread with a short handoff note (goal, files, branch, decisions, only the earlier findings the next PR depends
+   on, each with why it matters and how to check it, and no transcript dump) rather than reusing the old context. Stay
+   in the same thread for opening the PR for work built there, CI fixes and review rounds on that PR, work needing that
+   checkout's uncommitted edits, or a tiny warm follow-up under ~100k tokens. Anthropic's first cost recommendation is
+   to clear between unrelated tasks (documented, costs). Threads of 500 to 900 requests are where the cost is.
 2. **Fewer requests.** Send independent tool calls together in one turn, and chain shell checks in one command. Each
    extra turn re-reads the whole thread. The researcher reports that Anthropic's parallel tool use page says Fable
    models batch less in long loops unless asked to (not re-checked).
@@ -121,8 +124,9 @@ were checked against the documentation on 2026-11-24 (documented:
    hour on a subscription.
 6. **Orchestrate from a small thread** (default). Each child that finishes wakes its parent, and the parent re-reads
    everything it holds. A parent at 400,000 tokens pays that on every wake.
-7. **Read part of a file when part is enough,** and keep long output such as logs and test runs in a file, not in the
-   thread. Anthropic's cost page recommends filtering noisy output (documented, costs).
+7. **Keep tool output small and targeted.** Filter large JSON, API and `gh` responses (`--jq`, `jq`) and long logs to
+   the needed fields or lines before they enter the thread, and search large files for the specific question (`rg`)
+   instead of reading whole files (documented, costs; see "Context-management techniques (2026-11-28)" below).
 
 ### What is not worth the effort
 
@@ -325,7 +329,166 @@ The owner asked for all five settings. Four are in place and one is his to pick.
 - **To undo:** restore `~/.claude/settings.before-usage-savings-2026-11-24.json` for settings 1, 3 and 4, and
   `~/.t3/userdata/settings.before-idle-compaction.json` for setting 2.
 
-Re-measure after a week with the method at the end of this guide.
+## Follow-up and other providers (2026-11-27)
+
+Three days after the 2026-11-24 Claude settings were applied, Claude was re-measured and Antigravity (Gemini 4 Neon),
+Codex and Grok were measured for the first time (all local figures: **measured here**, one Mac; raw notes in
+[`research/multi-provider-token-use-2026-11-27.md`](../research/multi-provider-token-use-2026-11-27.md) and
+[`research/multi-provider-x-grok-2026-11-27.md`](../research/multi-provider-x-grok-2026-11-27.md)).
+
+### Claude after three days (2026-11-24 to 2026-11-27)
+
+Non-Haiku requests, same deduplication method as above (measured here, one Mac):
+
+| Window | Requests | Avg context | Share from >200k | Requests >300k | Compactions |
+|---|---:|---:|---:|---:|---:|
+| Before (2026-11-17 to 2026-11-24) | 20,896 | 227,166 | 69.9% | 4,825 (23.1%) | 25 |
+| After (2026-11-24 to 2026-11-27) | 4,550 | 159,053 (-30%) | 42.6% | 187 (4.1%) | 22 |
+
+### Are lean child instances useful outside Anthropic?
+
+**Mostly no.** A separate lean child instance (`claudeLean`) is uniquely practical on Claude Code because T3 Code lets a
+second Claude instance pass `--settings` without a second login, and Claude carries a 2x 1-hour cache-write fee plus
+several heavy plugins. On the other three harnesses, trimming the single configuration directly works better:
+
+| Provider (2026-11-20 to 2026-11-27, one Mac) | Requests | Avg context | Fresh startup (median) | Cache hit | Best move |
+|---|---:|---:|---:|---:|---|
+| Antigravity (Gemini 4 Neon & others) | 4,439 | 206,996 | 43,249 (16,361 native subagent) | 93.2% | Do not make a second instance; update T3 Code for lazy MCP tools, default to `medium`/`high` instead of `xhigh`, and compact manually around 200k–250k. |
+| Codex (`gpt-6.2-astra` / `sol`) | 347 | 67,782 | 28,564 → **24,727** after change | 92.6% | Disable unused plugins directly in `~/.codex/config.toml` instead of cloning an instance. |
+| Grok (`grok-4.7`) | 25 turns | — | — | 88.5% | Keep `~/.grok/AGENTS.md` as a short Grok-only footer and disable unused inherited MCP servers in `~/.grok/config.toml`. |
+
+### What actually drives Antigravity / Gemini 4 Neon usage
+
+- **Pricing and caching mechanics (`documented`, [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing)):**
+  Gemini 4 Neon lists at $3.00 / 1M input tokens, $15.00 / 1M output tokens (including thinking tokens), and $0.15 / 1M
+  cached input tokens (95% discount, implicit caching only; explicit caching is not supported). Thinking tokens cost 100x
+  cached input.
+- **Effort dominates output spend (measured here, 2026-11-20 to 2026-11-27):** 46% of all Antigravity requests (2,048)
+  ran on `gemini-4-neon-xhigh` (averaging 272,135 tokens of context) and 27% (1,207) on `high`. Only 1.5% (67) ran on
+  `medium`, which is Google's documented default ([Antigravity models](https://antigravity.google/docs/models)).
+- **No automatic early compaction (measured here / documented):** 70.9% of Antigravity context came from requests over
+  200,000 tokens, 1,046 requests passed 300,000, and sessions reached 511,925 (Neon's documented 512K Antigravity
+  window) with 0 compactions. T3 Code's `autoCompactWindow` and `idleCompaction` are Claude-only
+  ([providers-claude.md](https://github.com/pingdotgg/t3code/blob/main/docs/user/providers-claude.md)). Use `/compact`
+  manually or hand off around 200,000–250,000 tokens ([Compact command](https://antigravity.google/docs/commands/compact)).
+- **Eager T3 MCP tools inflated startup, now fixed upstream (`source`):** T3 Code previously listed ~74–82 MCP tools
+  upfront (~50 KB) on Antigravity ACP, which pushed fresh T3 sessions from ~23.8k to ~43.2k tokens (measured here).
+  [T3 Code PR #39362](https://github.com/pingdotgg/t3code/pull/39362) (merged 2026-11-27) adds a `deferred-proxy` mode
+  exposing 5 direct tools (`orchestrator_capabilities`, `delegate_task`, `task_status`, `tool_search`, `tool_call`).
+  Updating T3 Code applies that cut to every Antigravity thread without a second instance.
+- **The cache cliff on this Mac is past 15 minutes idle, not 1 minute (measured here):** viral X reports from earlier
+  CLI builds (`1.5.11`–`1.5.12`) claimed Neon's cache fell to ~9% after 1 minute and missed 65% at 300–500k (reported on
+  X). Across 3,328 Neon calls here on Antigravity ACP `1.5.15`, cache hit stayed **90–94%** up through 15 minutes
+  (91.6% at 5–15 minutes) and **96.8%** at 300–512k, falling sharply only **past 15 minutes idle** (40.2% hit, 58.8%
+  zero-cache misses). Avoid waking a large Neon thread after more than 15 minutes idle.
+- **Global rules file size cap (`documented`):** Antigravity truncates any rule file over 24,000 bytes on line
+  boundaries ([Antigravity rules](https://antigravity.google/docs/rules)). Keep a symlinked global rules file safely
+  under 24 KB (20,688 bytes here after 2026-11-27).
+
+### What was applied on 2026-11-27 (and what was deferred)
+
+Applied after an independent review and verified with live sessions on Codex, Grok and Antigravity (measured here, one
+Mac):
+
+- **Codex:** turned `t3-pstack` off in `~/.codex/config.toml` (read-only review sessions do not run pstack, and absolute
+  `worker.md` paths outside Codex remain readable). `<skills_instructions>` fell from 27.1 KB to 11.5 KB (-15.6 KB), and
+  first-turn input dropped from 28,441 to 24,727 tokens even after syncing 4.5 KB of missing global rules (~4,850 net
+  tokens saved).
+- **Grok rules:** `grok inspect` showed Grok already loads `~/.claude/CLAUDE.md` (~5,172 tokens) via Claude
+  compatibility alongside `~/.grok/AGENTS.md` (~3,008 tokens). Replacing `~/.grok/AGENTS.md` with a Grok-only footer cut
+  it to ~282 tokens (~2,726 saved per turn) while keeping full global rules active.
+- **Grok MCPs:** disabled three unused local/plugin MCP servers (0 all-time calls) via `grok mcp disable <name>`
+  (`disabled_mcp_servers` in `~/.grok/config.toml`), leaving Claude's own MCP config untouched.
+- **Global rules and memory hygiene:** clarified that `claudeLean` covers Fable children as well as Opus; synced three
+  missing sections into `~/.codex/AGENTS.md`; deleted four superseded Claude memory files that contradicted current
+  rules (backups kept locally).
+- **Deferred to the owner:** whether to disable `claude-mem` globally (still actively called ~980 times in transcripts;
+  ~2.7 GB on disk) and whether to lower the `t3-pstack` model-sheet budget via `/setup-pstack`.
+
+### New thread per PR: break-even and local replay (2026-11-27)
+
+Verified independently by Opus 5.5 against local transcripts (2026-11-20 to 2026-11-27, one Mac) and by Grok on X (raw
+notes in [`research/new-thread-per-pr-opus-2026-11-27.md`](../research/new-thread-per-pr-opus-2026-11-27.md) and
+[`research/new-thread-per-pr-x-grok-2026-11-27.md`](../research/new-thread-per-pr-x-grok-2026-11-27.md)):
+
+- **Pricing correction (`documented`, [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing)):**
+  cache hits & refreshes cost **0.05x** base input on Opus 5.5 ($0.20 vs. $4.00/MTok) and **0.025x** on Fable 5.2
+  ($0.20 vs. $8.00/MTok), not 0.1x.
+- **Measured per-PR shape (measured here, 2026-11-20 to 2026-11-27, one Mac):**
+  - Claude (324 sessions, 16,624 requests): median **39** requests to open a PR, median **258k** context carried into
+    the turn after a thread's first PR, median **6.5** follow-up requests (CI fixes/reviews) on that PR.
+  - Antigravity / Neon (147 sessions): median **24** requests per PR, median **231k** context carried after a PR.
+- **Break-even turn count (fresh start + up to 30k re-read files vs. carrying prior context `C_old`):**
+
+| Prior thread context (`C_old`) | Opus 5.5 (after Nov 24 ~55k start) | Gemini 4 Neon (~43k start) |
+|---|---:|---:|
+| 100k | 21–48 requests | 15–26 requests |
+| 150k | 10–23 requests | 8–14 requests |
+| 250k | 5–11 requests | 4–7 requests |
+| 350k | 3–7 requests | 3–5 requests |
+
+- **Replay of the 12 later-PR segments (measured here):** reusing an old thread for a second or later PR cost **$53 in
+  extra cached context plus $18 in uncached advisor calls** ($71 total at list prices; advisor calls send the full
+  thread to Fable uncached, totaling 511 calls / 101M tokens across the week) against **$3 to $8** for fresh starts —
+  10–20x cheaper per PR (~2.6% of total weekly input cost because only 3 of 324 Claude sessions and 1 of 147 Antigravity
+  sessions carried more than one PR).
+- **Rule applied on 2026-11-27:** added `## A new PR gets a new thread` to `~/.claude/CLAUDE.md` and
+  `~/.codex/AGENTS.md` (propagated automatically to Antigravity via symlink and Grok via Claude compatibility), keeping
+  `~/.claude/CLAUDE.md` under 22 KB. Warm active top-level threads were notified directly; cold idle threads were left
+  sleeping so they do not pay a 2x cache rebuild and will pick up the rule on their next compaction or restart.
+
+### Context-management techniques: literature and X check (2026-11-28)
+
+Codex (`gpt-6.2-astra`) ran local checks and a literature pass alongside a Grok X search on `git bisect run`,
+path-scoped rules and structured-output filtering (raw notes in
+[`research/context-techniques-astra-2026-11-28.md`](../research/context-techniques-astra-2026-11-28.md) and
+[`research/context-techniques-x-grok-2026-11-28.md`](../research/context-techniques-x-grok-2026-11-28.md)). Every
+paper and writeup below was opened on 2026-11-28:
+
+- **Selective, dependency-named handoffs (`measured`, [SWE-ContextBench](https://arxiv.org/html/2602.08316v1), Sections
+  3.3 & 3.5, 99 related coding tasks):**
+
+| Experience reuse setting | Solved | Avg cost / task |
+|---|---:|---:|
+| No prior context (baseline) | 26.26% (26/99) | $0.79 |
+| Supplied relevant summary (Oracle Summary Reuse) | 34.34% (34/99) | $0.77 |
+| Supplied full prior trajectory (Oracle Experience Reuse) | 27.27% (27/99) | modest increase over baseline |
+| Agent chooses summaries itself (Free Summary Reuse) | 22.22% (22/99) | $0.85 |
+| Agent chooses raw trajectories itself (Free Experience Reuse) | 26.26% (26/99) | $0.98 |
+
+  Supplying a relevant summary raised solves from 26 to 34 of 99 at the lowest average cost ($0.77), while letting the
+  agent select summaries itself dropped solves below baseline to 22 of 99 at $0.85. Naming the concrete dependency (*why*
+  a carried-over finding matters to the next PR and *how* to check it) is our practical approximation of supplied
+  relevance; the self-selection drop is also a caution for automatic memory-retrieval tools.
+- **Filtering structured JSON, API and `gh` payloads before they enter context:**
+  - `measured here` (2026-11-27, PR #2 of this repo): raw `gh api` PR JSON was **22,194 bytes** vs. **91 bytes** for
+    the 5 status fields needed (**244x smaller** bytes entering the thread; billed token delta not separately metered).
+  - `reported` (`@kellegous`, 2026-11-27,
+    [writeup](https://kellegous.com/j/2026/11/27/filtering-mcp-tools-with-jq-pt2/) with published code): adding optional
+    `jq` filtering (parameter or meta-tool) to MCP JSON cut total input tokens by **85.5% / 81.9%** on Claude Opus 5.5
+    and **91.7% / 93.3%** on GPT-6.2 Sol at unchanged accuracy on his evaluation set.
+- **Question-guided reads and git history:**
+  - `measured` ([SWE-Pruner](https://arxiv.org/html/2601.16746v1), Table 3, 50-task SWE-bench subset): a trained 0.6B
+    neural skimmer guided by an explicit read question solved **64% vs. 62%** (32/50 vs. 31/50) using **31% fewer
+    tokens** (generic summarization dropped to 56%). Our habit of searching a large file with a specific question
+    (`rg`/symbol lookup) before reading a range is an **inference** from this method, not a forecast of 31% savings.
+  - `default` (no published before/after token measurements found on X for `git bisect run` or `.claude/rules/`
+    `paths:`): use `git log -S` when you know the literal that changed, and `git bisect run` when only running a test
+    identifies the regressing commit.
+- **Observation masking vs. LLM summarization (`measured`,
+  [JetBrains Research — The Complexity Trap](https://kairos.jetbrains.com/research/articles/the-complexity-trap),
+  August 2025, older models):** replacing older tool outputs with placeholders roughly halved cost against raw history,
+  achieved the lowest cost in **4 of 5** model setups with solve rate on par (ahead in 2 of 5), and avoided
+  summarization stretching trajectories (Gemini 2.5 Flash averaged **52 turns** after summarization vs. **44** with
+  masking). Claude Code already runs server-side tool-result clearing (`microcompact`, not user-tunable), whereas naive
+  client-side masking would break prompt caching. Consistent with (**inference**) keeping `autoCompactWindow` moderate
+  (`300000`) rather than compacting aggressively early.
+- **Reading order for this repository (`measured here`, 2026-11-27):** `README.md` (9,287 B) and `docs/` (59,217 B)
+  hold 14% of tracked bytes while the 12 earlier `research/` files hold 86% (430,671 B). Search `README.md` and `docs/`
+  first (`rg`), and open a `research/` file only when verifying a cited detail.
+- **Applied on 2026-11-28 (reviewed by Fable):** upgraded the handoff clause in `## A new PR gets a new thread` and
+  appended `## Keep tool output small` to `~/.claude/CLAUDE.md` (21,941 B, under 22 KB) and `~/.codex/AGENTS.md`
+  (18,724 B). Existing threads were not woken; they inherit the updated rules on their next start or compaction.
 
 ## Checked and not confirmed
 
@@ -338,5 +501,7 @@ Re-measure after a week with the method at the end of this guide.
 
 The transcripts are in `~/.claude/projects/`, one JSON line per message. Each assistant line has `message.usage` with
 `input_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens` and `output_tokens`. Count each request once
-(the same `message.id` and `requestId` repeat while a reply streams). Re-run after changing a setting and compare the
-average context per request and the share of usage that comes from requests over 200,000 tokens.
+(the same `message.id` and `requestId` repeat while a reply streams). Re-run after changing a setting and compare
+**cost per successfully completed task** alongside request count, cache reads, average context per request, and the
+share of usage from requests over 200,000 tokens — because a shorter prompt that adds turns or lowers fix quality can
+cost more overall.

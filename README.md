@@ -9,7 +9,8 @@ Two standards for working with coding agents, researched on 2026-11-24:
 2. **How to spend fewer tokens** in T3 Code threads. Full guide: [docs/token-use.md](docs/token-use.md).
 
 Each guide gives a source for every point and says whether it is documented by the tool maker, measured, reported by one
-person, an opinion, or only our default. The researchers' raw results are in [research/](research/).
+person, an opinion, or only our default. The researchers' raw results are in [research/](research/) (search `README.md`
+and `docs/` first, and open `research/` only to verify a cited detail).
 
 ## 1. Repository layout: the short version
 
@@ -88,20 +89,44 @@ Settings worth changing, in order. Four of the five were applied on 2026-11-24 (
 
 Habits for every thread:
 
-1. One task, one thread. Hand off with a short note and start fresh at about 200,000 tokens.
+1. One PR, one thread. Start each new PR in a fresh thread with a short handoff note (goal, files, branch, decisions,
+   and only prior findings the next PR depends on, each with why it matters and how to check it — no transcript dump;
+   stay only for CI/review fixes on that PR, uncommitted edits in that checkout, or a tiny warm follow-up under ~100k
+   tokens). Hand off long tasks at about 200,000 tokens.
 2. Send independent tool calls together. Each extra turn re-reads the whole thread.
 3. Start a child agent only when it earns its 70,000-token start.
 4. Stop a review loop after 3 rounds and ask the owner. Loops here ran 4 to 9. Anthropic capped its own at 3 and saw
    pull requests needing five or more rounds fall from 8.9% to 1.5%.
 5. Do not wake a large idle thread for a small message.
+6. Filter large JSON, API and `gh` output (`--jq`, `jq`) and long logs before they enter the thread; search large files
+   for the specific thing (`rg`) and read only the matching range.
+
+### Follow-up and other providers (2026-11-27)
+
+- **Claude after three days (measured here, one Mac):** average non-Haiku context dropped 30% (227,000 → 159,000), and
+  the share of context from requests over 200,000 fell from 69.9% to 42.6%.
+- **Lean child instances are mostly an Anthropic win.** Keep `claudeLean` for ordinary Claude children (both Opus and
+  Fable). For Antigravity (Gemini 4 Neon), Codex and Grok, trimming the single setup works better:
+  - **Antigravity / Gemini 4 Neon (measured here, 2026-11-20 to 2026-11-27):** 46% of calls ran at `xhigh` and 70.9% of
+    context was over 200,000 with 0 compactions (T3's auto-compact settings are Claude-only). Default to `medium` or
+    `high`, compact manually around 200,000–250,000, avoid waking large threads after 15+ minutes idle (cache hit fell
+    from 91.6% to 40.2% past 15 minutes), and update T3 Code for lazy Antigravity MCP tools (PR #39362, merged
+    2026-11-27). Keep symlinked global rules safely under Antigravity's 24,000-byte file cap.
+  - **Codex:** turning off unused plugins directly in `~/.codex/config.toml` saved ~4,850 net startup tokens on review
+    sessions.
+  - **Grok:** Grok already loads `~/.claude/CLAUDE.md` via Claude compatibility; trimming `~/.grok/AGENTS.md` to a
+    Grok-only footer saved ~2,726 tokens/turn, and `grok mcp disable <name>` turns off unused inherited MCP servers
+    without editing Claude's config.
+
+Full numbers and sources are in [docs/token-use.md](docs/token-use.md), "Follow-up and other providers (2026-11-27)".
 
 ## How this was researched
 
-- Grok searched X in two rounds: about 190 posts on layout and about 160 on token use, with the link, author and date
-  of each post it cites. The second round re-examined the first round's leads and gave each a verdict.
-- Gemini 4 Neon read the tool makers' documentation, the published studies and T3 Code's own docs, then in a later
-  round read the studies in full and compared the rules files of 16 large public repositories.
-- The main claims and every setting name were then checked against the original pages.
-- The usage numbers were counted from the Claude Code transcripts on the owner's Mac.
+- Grok searched X in three rounds: about 190 posts on layout, about 160 on Claude token use, and a 2026-11-27 round on
+  multi-provider lean setups and shared rules, with the link, author and date of each post cited.
+- Gemini 4 Neon read the tool makers' documentation, the published studies, T3 Code's source/docs, and compared the
+  rules files of 16 large public repositories.
+- The main claims, pricing pages, PRs and setting names were opened and checked against the original pages.
+- The usage numbers were counted from local Claude Code, Antigravity, Codex and Grok transcripts on one Mac.
 
 Created in [T3 Code](https://t3.codes).
