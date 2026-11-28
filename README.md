@@ -88,7 +88,9 @@ Settings worth changing, in order. Four of the five were applied on 2026-11-24 (
 
 Habits for every thread:
 
-1. One task, one thread. Hand off with a short note and start fresh at about 200,000 tokens.
+1. One PR, one thread. Start each new PR in a fresh thread with a short handoff note (stay only for CI/review fixes on
+   that PR, uncommitted edits in that checkout, or a tiny warm follow-up under ~100k tokens). Hand off long tasks at
+   about 200,000 tokens.
 2. Send independent tool calls together. Each extra turn re-reads the whole thread.
 3. Start a child agent only when it earns its 70,000-token start.
 4. Stop a review loop after 3 rounds and ask the owner. Loops here ran 4 to 9. Anthropic capped its own at 3 and saw

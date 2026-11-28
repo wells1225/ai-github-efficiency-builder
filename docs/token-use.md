@@ -98,9 +98,11 @@ were checked against the documentation on 2026-11-24 (documented:
 
 ### Habits (what every thread does)
 
-1. **One task, one thread.** When a task is done, or a thread passes about 200,000 tokens (default), write a short
-   handoff note (done, in progress, left to do) and continue in a new thread. Anthropic's first cost recommendation is to clear
-   between unrelated tasks (documented, costs). Threads of 500 to 900 requests are where the cost is.
+1. **One PR (or task), one thread.** When a thread has already opened or finished a PR or task, start the next PR in a
+   new thread with a short handoff note (goal, files, branch, decisions) rather than reusing the old context. Stay in
+   the same thread for opening the PR for work built there, CI fixes and review rounds on that PR, work needing that
+   checkout's uncommitted edits, or a tiny warm follow-up under ~100k tokens. Anthropic's first cost recommendation is
+   to clear between unrelated tasks (documented, costs). Threads of 500 to 900 requests are where the cost is.
 2. **Fewer requests.** Send independent tool calls together in one turn, and chain shell checks in one command. Each
    extra turn re-reads the whole thread. The researcher reports that Anthropic's parallel tool use page says Fable
    models batch less in long loops unless asked to (not re-checked).
@@ -400,6 +402,38 @@ Mac):
   rules (backups kept locally).
 - **Deferred to the owner:** whether to disable `claude-mem` globally (still actively called ~980 times in transcripts;
   ~2.7 GB on disk) and whether to lower the `t3-pstack` model-sheet budget via `/setup-pstack`.
+
+### New thread per PR: break-even and local replay (2026-11-27)
+
+Verified independently by Opus 5.5 against local transcripts (2026-11-20 to 2026-11-27, one Mac) and by Grok on X (raw
+notes in [`research/new-thread-per-pr-opus-2026-11-27.md`](../research/new-thread-per-pr-opus-2026-11-27.md) and
+[`research/new-thread-per-pr-x-grok-2026-11-27.md`](../research/new-thread-per-pr-x-grok-2026-11-27.md)):
+
+- **Pricing correction (`documented`, [Anthropic pricing](https://platform.claude.com/docs/en/about-claude/pricing)):**
+  cache hits & refreshes cost **0.05x** base input on Opus 5.5 ($0.20 vs. $4.00/MTok) and **0.025x** on Fable 5.2
+  ($0.20 vs. $8.00/MTok), not 0.1x.
+- **Measured per-PR shape (measured here, 2026-11-20 to 2026-11-27, one Mac):**
+  - Claude (324 sessions, 16,624 requests): median **39** requests to open a PR, median **258k** context carried into
+    the turn after a thread's first PR, median **6.5** follow-up requests (CI fixes/reviews) on that PR.
+  - Antigravity / Neon (147 sessions): median **24** requests per PR, median **231k** context carried after a PR.
+- **Break-even turn count (fresh start + up to 30k re-read files vs. carrying prior context `C_old`):**
+
+| Prior thread context (`C_old`) | Opus 5.5 (after Nov 24 ~55k start) | Gemini 4 Neon (~43k start) |
+|---|---:|---:|
+| 100k | 21–48 requests | 15–26 requests |
+| 150k | 10–23 requests | 8–14 requests |
+| 250k | 5–11 requests | 4–7 requests |
+| 350k | 3–7 requests | 3–5 requests |
+
+- **Replay of the 12 later-PR segments (measured here):** reusing an old thread for a second or later PR cost **$53 in
+  extra cached context plus $18 in uncached advisor calls** ($71 total at list prices; advisor calls send the full
+  thread to Fable uncached, totaling 511 calls / 101M tokens across the week) against **$3 to $8** for fresh starts —
+  10–20x cheaper per PR (~2.6% of total weekly input cost because only 3 of 324 Claude sessions and 1 of 147 Antigravity
+  sessions carried more than one PR).
+- **Rule applied on 2026-11-27:** added `## A new PR gets a new thread` to `~/.claude/CLAUDE.md` and
+  `~/.codex/AGENTS.md` (propagated automatically to Antigravity via symlink and Grok via Claude compatibility), keeping
+  `~/.claude/CLAUDE.md` under 22 KB. Warm active top-level threads were notified directly; cold idle threads were left
+  sleeping so they do not pay a 2x cache rebuild and will pick up the rule on their next compaction or restart.
 
 ## Checked and not confirmed
 
